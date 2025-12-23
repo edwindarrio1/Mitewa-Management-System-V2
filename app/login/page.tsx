@@ -1,15 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import {
-  signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth } from "@/lib/firebase/firebaseConfig";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db } from "@/lib/firebase/firebaseConfig";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { FcGoogle } from "react-icons/fc";
 import { motion } from "framer-motion";
+import Link from "next/link"; // Added Link import
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -18,14 +15,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // ✅ Email + Password Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/admin"); // ✅ Redirect to /admin
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+
+      // Check for user role in Firestore
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      const userData = userDoc.data();
+
+      if (userData?.role === "admin") {
+        router.push("/admin");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -33,24 +38,24 @@ export default function LoginPage() {
     }
   };
 
-  // ✅ Google Login
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-      router.push("/admin"); // ✅ Redirect to /admin
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-100 via-white to-emerald-200 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 transition-colors">
+    <div
+      className="min-h-screen flex items-center justify-center transition-colors relative"
+      style={{
+        backgroundImage: 'url(/online-personal-loan-financial-concept-600nw-2519190811.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
+      {/* Overlay for better form visibility */}
+      <div className="absolute inset-0 bg-gradient-to-br from-emerald-900/50 via-gray-900/70 to-black/60"></div>
+
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8"
+        className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 relative z-10"
       >
         <div className="text-center mb-6">
           <h1 className="text-3xl font-extrabold text-emerald-700 dark:text-emerald-400">
@@ -100,31 +105,28 @@ export default function LoginPage() {
             />
           </div>
 
+          {/* New Go to Home Link inside Form area */}
+          <div className="flex justify-between items-center text-sm font-medium text-gray-400 mt-2">
+            <Link href="/" className="hover:text-emerald-400 transition-colors flex items-center gap-1">
+              ← Go to Home
+            </Link>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2 font-medium transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2 font-medium transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 mt-4"
           >
             {loading ? "Signing in..." : "Login"}
           </button>
         </form>
 
-        <div className="mt-6 flex items-center gap-2">
-          <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
-          <span className="text-sm text-gray-500 dark:text-gray-400">or</span>
-          <div className="h-px flex-1 bg-gray-300 dark:bg-gray-600" />
-        </div>
-
-        {/* Google Login */}
-        <button
-          onClick={handleGoogleLogin}
-          className="mt-4 w-full flex items-center justify-center gap-2 border border-gray-300 dark:border-gray-700 rounded-lg py-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 font-medium text-gray-700 dark:text-gray-200"
-        >
-          <FcGoogle size={20} />
-          Continue with Google
-        </button>
-
-        <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-6">
+        <p className="text-center text-xs text-gray-500 dark:text-gray-400 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+          Don't have an account?{" "}
+          <Link href="/signup" className="text-emerald-500 hover:text-emerald-400 font-bold transition-colors">
+            Sign Up
+          </Link>
+          <br /><br />
           © {new Date().getFullYear()} MITEWA SACCO. All rights reserved.
         </p>
       </motion.div>

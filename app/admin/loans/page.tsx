@@ -13,9 +13,11 @@ import {
   doc,
   query,
   where,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
-import { FaPlus, FaTrash, FaSave, FaFileExport, FaFileImport } from "react-icons/fa";
+import { FaPlus, FaTrash, FaSave, FaFileExport, FaFileImport, FaCheck, FaTimes } from "react-icons/fa";
 
 interface MemberData {
   id: string;
@@ -27,37 +29,128 @@ interface Loan {
   memberId: string;
   date: string;
   amount: number;
-  interest: number; // editable
+  interest: number;
   paid: number;
   balance: number;
   deadline: string;
 }
 
+interface LoanRequest {
+  id: string;
+  userId: string;
+  userEmail: string;
+  amount: number;
+  purpose: string;
+  duration: number;
+  status: string;
+  createdAt: any;
+}
+
 export default function LoansPage() {
-  const [members, setMembers] = useState<MemberData[]>(DEFAULT_MEMBERS);
-  const [selectedMemberId, setSelectedMemberId] = useState<string>(DEFAULT_MEMBERS[0]?.id || "");
+  const [activeTab, setActiveTab] = useState<"loans" | "requests">("loans");
+  const [members, setMembers] = useState<MemberData[]>([]); // Initialize empty
+  const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
 
   const toNumber = (v: any) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
+
+  // Load Loan Requests
+  const loadLoanRequests = async () => {
+    const q = query(collection(db, "loanRequests"));
+    const snapshot = await getDocs(q);
+    const requests: LoanRequest[] = [];
+    snapshot.forEach((doc) => {
+      requests.push({ id: doc.id, ...doc.data() } as LoanRequest);
+    });
+    setLoanRequests(requests);
+  };
+
+  useEffect(() => {
+    const loadMembers = async () => {
+      try {
+        const q = query(collection(db, "members"));
+        const snapshot = await getDocs(q);
+        const membersData: MemberData[] = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name || "Unknown",
+        }));
+
+        // Sort by name
+        membersData.sort((a, b) => a.name.localeCompare(b.name));
+
+        setMembers(membersData);
+        if (membersData.length > 0) {
+          setSelectedMemberId(membersData[0].id);
+        }
+      } catch (error) {
+        console.error("Error loading members:", error);
+      }
+    };
+    loadMembers();
+    loadLoanRequests();
+  }, []);
+
+  // Approve Loan Request
+  const approveLoanRequest = async (req: LoanRequest) => {
+    try {
+      // Create new loan record
+      await addDoc(collection(db, "loans"), {
+        memberId: req.userId,
+        amount: req.amount,
+        interest: 0,
+        paid: 0,
+        balance: req.amount,
+        date: new Date().toISOString().slice(0, 10),
+        deadline: new Date(Date.now() + req.duration * 30 * 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10),
+        createdAt: serverTimestamp(),
+      });
+
+      // Update request status
+      await updateDoc(doc(db, "loanRequests", req.id), {
+        status: "approved",
+        approvedAt: serverTimestamp(),
+      });
+
+      loadLoanRequests();
+      alert("Loan request approved!");
+    } catch (error) {
+      console.error("Error approving loan:", error);
+      alert("Failed to approve loan request");
+    }
+  };
+
+  // Reject Loan Request
+  const rejectLoanRequest = async (req: LoanRequest) => {
+    try {
+      await updateDoc(doc(db, "loanRequests", req.id), {
+        status: "rejected",
+        rejectedAt: serverTimestamp(),
+      });
+
+      loadLoanRequests();
+      alert("Loan request rejected");
+    } catch (error) {
+      console.error("Error rejecting loan:", error);
+      alert("Failed to reject loan request");
+    }
+  };
 
   // Recalculate loan values
   const recalc = (loan: Loan) => {
     const amount = toNumber(loan.amount);
     const paid = toNumber(loan.paid);
 
-    // Fully paid → no penalty
     if (paid >= amount) {
       return { ...loan, interest: 0, balance: 0 };
     }
 
     const userInterest = toNumber(loan.interest);
-
     const todayStr = new Date().toISOString().slice(0, 10);
     const overdue = loan.deadline && loan.deadline < todayStr;
-
-    // Auto 1% interest if overdue, else use user-entered interest
     const interest = overdue ? amount * 0.01 : userInterest;
-
     const balance = amount + interest - paid;
 
     return { ...loan, interest, balance };
@@ -100,7 +193,7 @@ export default function LoansPage() {
       {
         id: crypto.randomUUID(),
         memberId: selectedMemberId,
-        date: "",
+        date: new Date().toISOString().slice(0, 10),
         amount: 0,
         interest: 0,
         paid: 0,
@@ -110,25 +203,56 @@ export default function LoansPage() {
     ]);
   };
 
-  const saveLoans = async () => {
-    for (const loan of loans) {
-      if (loan.id) {
-        await setDoc(doc(db, "loans", loan.id), loan);
+  const saveLoan = async (loan: Loan) => {
+    try {
+      if (loan.id && !loan.id.includes("-")) {
+        await setDoc(doc(db, "loans", loan.id), {
+          memberId: loan.memberId,
+          date: loan.date,
+          amount: loan.amount,
+          interest: loan.interest,
+          paid: loan.paid,
+          balance: loan.balance,
+          deadline: loan.deadline,
+        });
       } else {
-        await addDoc(collection(db, "loans"), loan);
+        await addDoc(collection(db, "loans"), {
+          memberId: loan.memberId,
+          date: loan.date,
+          amount: loan.amount,
+          interest: loan.interest,
+          paid: loan.paid,
+          balance: loan.balance,
+          deadline: loan.deadline,
+        });
       }
+      loadLoans();
+    } catch (error) {
+      console.error("Error saving loan:", error);
     }
-    alert("Saved!");
   };
 
-  const deleteLoan = async (id: string) => {
-    await deleteDoc(doc(db, "loans", id));
-    setLoans((prev) => prev.filter((l) => l.id !== id));
+  // Helper to save all loans
+  const saveAllLoans = async () => {
+    for (const loan of loans) {
+      await saveLoan(loan);
+    }
+    alert("All loans saved successfully!");
   };
 
-  const exportExcel = () => {
-    const dataToExport = loans.map((loan) => ({
-      MEMBER: members.find((m) => m.id === loan.memberId)?.name || "",
+  const deleteLoan = async (loan: Loan) => {
+    if (loan.id && !loan.id.includes("-")) {
+      await deleteDoc(doc(db, "loans", loan.id));
+    }
+    setLoans((prev) => prev.filter((l) => l.id !== loan.id));
+  };
+
+  const exportToExcel = () => {
+    const memberName = members.find((m) => m.id === selectedMemberId)?.name || "Unknown";
+    const safeName = memberName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+    const data = loans.map((loan) => ({
+      MEMBER: memberName,
       DATE: loan.date,
       AMOUNT: loan.amount,
       INTEREST: loan.interest,
@@ -137,16 +261,17 @@ export default function LoansPage() {
       DEADLINE: loan.deadline,
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Loans");
-    XLSX.writeFile(workbook, "loans.xlsx");
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Loans");
+    XLSX.writeFile(wb, `${safeName}_loans.xlsx`);
   };
 
-  const importExcel = (e: any) => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
+  const importFromExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
+    const reader = new FileReader();
     reader.onload = (evt: any) => {
       const bstr = evt.target.result;
       const wb = XLSX.read(bstr, { type: "binary" });
@@ -179,130 +304,194 @@ export default function LoansPage() {
   return (
     <AdminLayout>
       <div className="p-5">
-        {/* MEMBER SELECT */}
-        <div className="flex gap-3 mb-4 items-center">
-          <label className="text-gray-200">Member:</label>
-          <select
-            value={selectedMemberId}
-            onChange={(e) => setSelectedMemberId(e.target.value)}
-            className="bg-gray-700 text-gray-200 px-3 py-2 rounded-md"
+        {/* TABS */}
+        <div className="flex gap-4 mb-6 border-b border-gray-700">
+          <button
+            onClick={() => setActiveTab("loans")}
+            className={`px-6 py-3 font-semibold transition-colors ${activeTab === "loans"
+              ? "text-emerald-400 border-b-2 border-emerald-400"
+              : "text-gray-400 hover:text-gray-200"
+              }`}
           >
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* BUTTONS */}
-        <div className="flex gap-3 mb-4">
-          <button onClick={addLoanRow} className={`bg-blue-600 ${buttonClasses}`}>
-            <FaPlus /> Add Loan
+            Active Loans
           </button>
-          <button onClick={saveLoans} className={`bg-green-600 ${buttonClasses}`}>
-            <FaSave /> Save
-          </button>
-          <label className={`bg-yellow-600 ${buttonClasses} cursor-pointer`}>
-            <FaFileImport /> Import
-            <input type="file" accept=".xlsx" onChange={importExcel} className="hidden" />
-          </label>
-          <button onClick={exportExcel} className={`bg-purple-600 ${buttonClasses}`}>
-            <FaFileExport /> Export
+          <button
+            onClick={() => setActiveTab("requests")}
+            className={`px-6 py-3 font-semibold transition-colors ${activeTab === "requests"
+              ? "text-emerald-400 border-b-2 border-emerald-400"
+              : "text-gray-400 hover:text-gray-200"
+              }`}
+          >
+            Loan Requests
           </button>
         </div>
 
-        {/* TABLE */}
-        <div className="overflow-x-auto">
-          <table className="min-w-full bg-gray-800 text-gray-200 rounded">
-            <thead>
-              <tr className="bg-gray-700">
-                {["NO", "DATE", "AMOUNT", "INTEREST", "PAID", "BALANCE", "DEADLINE", "ACTIONS"].map(
-                  (h, i) => (
-                    <th key={i} className="px-3 py-2 border-b border-gray-600">
-                      {h}
-                    </th>
-                  )
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {loans.map((loan, index) => (
-                <tr key={loan.id} className="border-b border-gray-700">
-                  <td className="px-3 py-2">{index + 1}</td>
+        {/* ACTIVE LOANS TAB */}
+        {activeTab === "loans" && (
+          <>
+            {/* MEMBER SELECT */}
+            <div className="flex gap-3 mb-4 items-center">
+              <label className="text-gray-200">Member:</label>
+              <select
+                value={selectedMemberId}
+                onChange={(e) => setSelectedMemberId(e.target.value)}
+                className="bg-gray-700 text-gray-200 px-3 py-2 rounded-md"
+              >
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-                  <td className="px-3 py-2">
-                    <input
-                      type="date"
-                      value={loan.date}
-                      onChange={(e) =>
-                        handleLoanChange(loan.id!, "date", e.target.value)
-                      }
-                      className="bg-gray-700/50 px-2 py-1 w-full"
-                    />
-                  </td>
+            {/* BUTTONS */}
+            <div className="flex gap-3 mb-4">
+              <button onClick={addLoanRow} className={`bg-blue-600 ${buttonClasses}`}>
+                <FaPlus /> Add Loan
+              </button>
+              {/* Added General Save Button */}
+              <button onClick={saveAllLoans} className={`bg-green-600 ${buttonClasses}`}>
+                <FaSave /> Save
+              </button>
+              <button onClick={exportToExcel} className={`bg-green-600 ${buttonClasses}`}>
+                <FaFileExport /> Export
+              </button>
+              <label className={`bg-purple-600 ${buttonClasses} cursor-pointer`}>
+                <FaFileImport /> Import
+                <input type="file" accept=".xlsx,.xls" onChange={importFromExcel} className="hidden" />
+              </label>
+            </div>
 
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      value={loan.amount}
-                      onChange={(e) =>
-                        handleLoanChange(loan.id!, "amount", e.target.value)
-                      }
-                      className="bg-gray-700/50 px-2 py-1 w-full"
-                    />
-                  </td>
+            {/* TABLE */}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-sm text-gray-300">
+                <thead>
+                  <tr className="bg-gray-800">
+                    <th className="border border-gray-700 px-2 py-2">Date</th>
+                    <th className="border border-gray-700 px-2 py-2">Amount</th>
+                    <th className="border border-gray-700 px-2 py-2">Interest</th>
+                    <th className="border border-gray-700 px-2 py-2">Paid</th>
+                    <th className="border border-gray-700 px-2 py-2">Balance</th>
+                    <th className="border border-gray-700 px-2 py-2">Deadline</th>
+                    <th className="border border-gray-700 px-2 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loans.map((loan) => (
+                    <tr key={loan.id} className="bg-gray-900 hover:bg-gray-800">
+                      <td className="border border-gray-700 px-2 py-2">
+                        <input
+                          type="date"
+                          value={loan.date}
+                          onChange={(e) => handleLoanChange(loan.id!, "date", e.target.value)}
+                          className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
+                        />
+                      </td>
+                      <td className="border border-gray-700 px-2 py-2">
+                        <input
+                          type="number"
+                          value={loan.amount}
+                          onChange={(e) => handleLoanChange(loan.id!, "amount", e.target.value)}
+                          className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
+                        />
+                      </td>
+                      <td className="border border-gray-700 px-2 py-2">
+                        <input
+                          type="number"
+                          value={loan.interest}
+                          onChange={(e) => handleLoanChange(loan.id!, "interest", e.target.value)}
+                          className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
+                        />
+                      </td>
+                      <td className="border border-gray-700 px-2 py-2">
+                        <input
+                          type="number"
+                          value={loan.paid}
+                          onChange={(e) => handleLoanChange(loan.id!, "paid", e.target.value)}
+                          className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
+                        />
+                      </td>
+                      <td className="border border-gray-700 px-2 py-2 font-bold">{loan.balance.toFixed(2)}</td>
+                      <td className="border border-gray-700 px-2 py-2">
+                        <input
+                          type="date"
+                          value={loan.deadline}
+                          onChange={(e) => handleLoanChange(loan.id!, "deadline", e.target.value)}
+                          className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
+                        />
+                      </td>
+                      <td className="border border-gray-700 px-2 py-2">
+                        <div className="flex gap-2">
+                          {/* REMOVED SAVE BUTTON FROM HERE */}
+                          <button onClick={() => deleteLoan(loan)} className="bg-red-600 px-2 py-1 rounded text-xs">
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      value={loan.interest}
-                      onChange={(e) =>
-                        handleLoanChange(loan.id!, "interest", e.target.value)
-                      }
-                      className="bg-gray-700/50 px-2 py-1 w-full"
-                    />
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      value={loan.paid}
-                      onChange={(e) =>
-                        handleLoanChange(loan.id!, "paid", e.target.value)
-                      }
-                      className="bg-gray-700/50 px-2 py-1 w-full"
-                    />
-                  </td>
-
-                  <td className="px-3 py-2 text-red-400">
-                    {loan.balance.toFixed(2)}
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <input
-                      type="date"
-                      value={loan.deadline}
-                      onChange={(e) =>
-                        handleLoanChange(loan.id!, "deadline", e.target.value)
-                      }
-                      className="bg-gray-700/50 px-2 py-1 w-full"
-                    />
-                  </td>
-
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => deleteLoan(loan.id!)}
-                      className="bg-red-600 px-3 py-2 rounded text-white flex items-center gap-1 transform transition-transform duration-150 hover:scale-105 active:scale-95"
-                    >
-                      <FaTrash /> Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* LOAN REQUESTS TAB */}
+        {activeTab === "requests" && (
+          <div className="space-y-4">
+            {loanRequests.filter(r => r.status === "pending").length === 0 ? (
+              <div className="text-center text-gray-400 py-12">
+                <p className="text-xl">No pending loan requests</p>
+              </div>
+            ) : (
+              loanRequests
+                .filter((r) => r.status === "pending")
+                .map((req) => (
+                  <div key={req.id} className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                      <div>
+                        <p className="text-gray-400 text-sm">User</p>
+                        <p className="text-white font-semibold">{req.userEmail}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-sm">Amount</p>
+                        <p className="text-emerald-400 font-bold text-lg">KES {req.amount.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-sm">Duration</p>
+                        <p className="text-white font-semibold">{req.duration} months</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-sm">Date</p>
+                        <p className="text-white font-semibold">
+                          {req.createdAt?.toDate ? req.createdAt.toDate().toLocaleDateString() : "N/A"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mb-4">
+                      <p className="text-gray-400 text-sm mb-1">Purpose</p>
+                      <p className="text-white">{req.purpose}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => approveLoanRequest(req)}
+                        className="bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-colors"
+                      >
+                        <FaCheck /> Approve
+                      </button>
+                      <button
+                        onClick={() => rejectLoanRequest(req)}
+                        className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-colors"
+                      >
+                        <FaTimes /> Reject
+                      </button>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

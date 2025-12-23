@@ -2,79 +2,108 @@
 
 import { useEffect, useState } from "react";
 import AdminLayout from "./Admin-Layout";
+import ProtectedAdmin from "./components/ProtectedAdmin";
+import { collection, getDocs, doc, getDoc, query, where, collectionGroup } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+import { db, auth } from "@/lib/firebase/firebaseConfig";
 import {
   HiOutlineUserGroup,
   HiOutlineCurrencyDollar,
   HiOutlineChartBar,
+  HiOutlineChat,
+  HiOutlineDocumentText
 } from "react-icons/hi";
-import ProtectedAdmin from "./components/ProtectedAdmin";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "../../lib/firebase";
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState([
     {
       title: "Total Members",
       value: 0,
-      icon: (
-        <HiOutlineUserGroup
-          size={34}
-          className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-        />
-      ),
+      icon: <HiOutlineUserGroup size={34} className="text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]" />,
     },
     {
       title: "Total Loans",
       value: 0,
-      icon: (
-        <HiOutlineCurrencyDollar
-          size={34}
-          className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]"
-        />
-      ),
+      icon: <HiOutlineCurrencyDollar size={34} className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]" />,
     },
     {
-      title: "Total Investments",
+      title: "Total Savings",
       value: 0,
-      icon: (
-        <HiOutlineChartBar
-          size={34}
-          className="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]"
-        />
-      ),
+      icon: <HiOutlineChartBar size={34} className="text-green-400 drop-shadow-[0_0_8px_rgba(74,222,128,0.5)]" />,
     },
+    {
+      title: "Pending Requests",
+      value: 0,
+      icon: <HiOutlineDocumentText size={34} className="text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]" />,
+    },
+    {
+      title: "Unread Messages",
+      value: 0,
+      icon: <HiOutlineChat size={34} className="text-purple-400 drop-shadow-[0_0_8px_rgba(192,132,252,0.5)]" />,
+    }
   ]);
 
-  const [adminName] = useState("Admin"); // Static name since login is removed
+  const [adminName, setAdminName] = useState("Admin");
+
+  // Fetch admin name
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setAdminName(userData.name || userData.fullName || user.displayName || user.email || "Admin");
+          } else {
+            setAdminName(user.displayName || user.email || "Admin");
+          }
+        } catch (error) {
+          console.error("Error fetching admin name:", error);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   // Fetch dashboard stats from Firebase
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        // Total members
+        // 1. Total members
         const membersSnapshot = await getDocs(collection(db, "members"));
         const totalMembers = membersSnapshot.size;
 
-        // Total loans (sum amounts)
+        // 2. Total loans (sum amounts)
         const loansSnapshot = await getDocs(collection(db, "loans"));
         const totalLoans = loansSnapshot.docs.reduce(
           (sum, doc) => sum + (doc.data().amount || 0),
           0
         );
 
-        // Total investments (sum amounts)
-        const investmentsSnapshot = await getDocs(
-          collection(db, "investments")
-        );
-        const totalInvestments = investmentsSnapshot.docs.reduce(
+        // 3. Total Savings (sum all 'savings' subcollection docs via collectionGroup)
+        const savingsSnapshot = await getDocs(collectionGroup(db, "savings"));
+        const totalSavings = savingsSnapshot.docs.reduce(
           (sum, doc) => sum + (doc.data().amount || 0),
           0
         );
 
+        // 4. Pending Loan Requests
+        const pendingReqQuery = query(collection(db, "loanRequests"), where("status", "==", "pending"));
+        const pendingReqSnap = await getDocs(pendingReqQuery);
+        const pendingRequests = pendingReqSnap.size;
+
+        // 5. Unread Messages (Client-side filter to avoid index error)
+        const msgQuery = query(collection(db, "chats"), where("status", "==", "sent"));
+        const msgSnap = await getDocs(msgQuery);
+        const unreadMessages = msgSnap.docs.filter(d => d.data().senderId !== "admin").length;
+
         setStats([
           { ...stats[0], value: totalMembers },
           { ...stats[1], value: totalLoans },
-          { ...stats[2], value: totalInvestments },
+          { ...stats[2], value: totalSavings },
+          { ...stats[3], value: pendingRequests },
+          { ...stats[4], value: unreadMessages },
         ]);
       } catch (err) {
         console.error("Error fetching dashboard stats:", err);
@@ -88,7 +117,7 @@ export default function AdminDashboardPage() {
     <ProtectedAdmin>
       <AdminLayout>
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {stats.map((stat) => (
             <div
               key={stat.title}

@@ -11,6 +11,7 @@ import {
   deleteDoc,
   setDoc,
   doc,
+  query
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { FaPlus, FaTrash, FaSave, FaFileExport, FaFileImport } from "react-icons/fa";
@@ -31,8 +32,8 @@ interface Saving {
 }
 
 export default function SavingsPage() {
-  const [members, setMembers] = useState<MemberData[]>(DEFAULT_MEMBERS);
-  const [selectedMemberId, setSelectedMemberId] = useState<string>(DEFAULT_MEMBERS[0]?.id || "");
+  const [members, setMembers] = useState<MemberData[]>([]); // Initialize empty
+  const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [savings, setSavings] = useState<Saving[]>([]);
 
   const toNumber = (v: any) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
@@ -57,6 +58,31 @@ export default function SavingsPage() {
 
     return { ...saving, interest, balance };
   };
+
+  // Load Members from Database
+  useEffect(() => {
+    const loadMembers = async () => {
+      try {
+        const q = query(collection(db, "members"));
+        const snapshot = await getDocs(q);
+        const membersData: MemberData[] = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name || "Unknown",
+        }));
+
+        // Sort by name
+        membersData.sort((a, b) => a.name.localeCompare(b.name));
+
+        setMembers(membersData);
+        if (membersData.length > 0) {
+          setSelectedMemberId(membersData[0].id);
+        }
+      } catch (error) {
+        console.error("Error loading members:", error);
+      }
+    };
+    loadMembers();
+  }, []);
 
   const loadSavings = async () => {
     if (!selectedMemberId) return;
@@ -116,11 +142,16 @@ export default function SavingsPage() {
     setSavings((prev) => prev.filter((s) => s.id !== id));
   };
 
+  // UPDATED: Now uses member name in filename
   const exportExcel = () => {
+    const memberName = members.find((m) => m.id === selectedMemberId)?.name || "Unknown_Member";
+    // Sanitize filename
+    const safeName = memberName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
     const dataToExport = savings.map((s) => ({
-      MEMBER: members.find((m) => m.id === s.memberId)?.name || "",
+      MEMBER: memberName,
       DATE: s.date,
-      DUE_DATE: s.dueDate || "", // NEW FIELD
+      DUE_DATE: s.dueDate || "",
       AMOUNT: s.amount,
       INTEREST: s.interest,
       BALANCE: s.balance,
@@ -129,7 +160,7 @@ export default function SavingsPage() {
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Savings");
-    XLSX.writeFile(workbook, "savings.xlsx");
+    XLSX.writeFile(workbook, `${safeName}_savings.xlsx`);
   };
 
   const importExcel = (e: any) => {
@@ -161,16 +192,6 @@ export default function SavingsPage() {
     reader.readAsBinaryString(file);
   };
 
-  const totals = savings.reduce(
-    (acc, s) => {
-      acc.amount += toNumber(s.amount);
-      acc.interest += toNumber(s.interest);
-      acc.balance += toNumber(s.balance);
-      return acc;
-    },
-    { amount: 0, interest: 0, balance: 0 }
-  );
-
   const buttonClasses =
     "px-4 py-2 rounded flex items-center gap-2 text-white transform transition-transform duration-150 hover:scale-105 active:scale-95";
 
@@ -186,6 +207,7 @@ export default function SavingsPage() {
             onChange={(e) => setSelectedMemberId(e.target.value)}
             className="bg-gray-700 text-gray-200 px-3 py-2 rounded-md"
           >
+            {members.length === 0 && <option>Loading members...</option>}
             {members.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -199,6 +221,7 @@ export default function SavingsPage() {
           <button onClick={addSavingRow} className={`bg-blue-600 ${buttonClasses}`}>
             <FaPlus /> Add Contribution
           </button>
+          {/* General SAVE button already here, correctly placed */}
           <button onClick={saveSavings} className={`bg-green-600 ${buttonClasses}`}>
             <FaSave /> Save
           </button>
@@ -211,110 +234,89 @@ export default function SavingsPage() {
           </button>
         </div>
 
-        {/* TABLE */}
+        {/* TABLE - Updated to match Loans Page Style */}
         <div className="overflow-x-auto">
-          <table className="min-w-full bg-gray-800 text-gray-200 rounded">
+          <table className="w-full border-collapse text-sm text-gray-300">
             <thead>
-              <tr className="bg-gray-700">
-                {[
-                  "NO",
-                  "DATE",
-                  "DUE DATE", // NEW COLUMN
-                  "CONTRIBUTION AMOUNT",
-                  "INTEREST EARNED",
-                  "BALANCE",
-                  "ACTIONS",
-                ].map((h, i) => (
-                  <th key={i} className="px-3 py-2 border-b border-gray-600">
-                    {h}
-                  </th>
-                ))}
+              <tr className="bg-gray-800">
+                <th className="border border-gray-700 px-2 py-2">No</th>
+                <th className="border border-gray-700 px-2 py-2">Date</th>
+                <th className="border border-gray-700 px-2 py-2">Due Date</th>
+                <th className="border border-gray-700 px-2 py-2">Amount</th>
+                <th className="border border-gray-700 px-2 py-2">Interest</th>
+                <th className="border border-gray-700 px-2 py-2">Balance</th>
+                <th className="border border-gray-700 px-2 py-2">Actions</th>
               </tr>
             </thead>
 
             <tbody>
               {savings.map((s, index) => (
-                <tr key={s.id} className="border-b border-gray-700">
-                  <td className="px-3 py-2">{index + 1}</td>
+                <tr key={s.id} className="bg-gray-900 hover:bg-gray-800">
+                  <td className="border border-gray-700 px-2 py-2 text-center">{index + 1}</td>
 
                   {/* DATE */}
-                  <td className="px-3 py-2">
+                  <td className="border border-gray-700 px-2 py-2">
                     <input
                       type="date"
                       value={s.date}
                       onChange={(e) => handleSavingChange(s.id!, "date", e.target.value)}
-                      className="bg-gray-700/50 px-2 py-1 w-full"
+                      className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
                     />
                   </td>
 
                   {/* DUE DATE */}
-                  <td className="px-3 py-2">
+                  <td className="border border-gray-700 px-2 py-2">
                     <input
                       type="date"
                       value={s.dueDate || ""}
                       onChange={(e) => handleSavingChange(s.id!, "dueDate", e.target.value)}
-                      className="bg-gray-700/50 px-2 py-1 w-full"
+                      className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
                     />
                   </td>
 
                   {/* AMOUNT */}
-                  <td className="px-3 py-2">
+                  <td className="border border-gray-700 px-2 py-2">
                     <input
                       type="number"
                       value={s.amount}
                       onChange={(e) => handleSavingChange(s.id!, "amount", e.target.value)}
-                      className="bg-gray-700/50 px-2 py-1 w-full"
+                      className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
                     />
                   </td>
 
                   {/* INTEREST */}
-                  <td className="px-3 py-2">
+                  <td className="border border-gray-700 px-2 py-2">
                     <input
                       type="number"
                       value={s.interest}
                       onChange={(e) => handleSavingChange(s.id!, "interest", e.target.value)}
-                      className="bg-gray-700/50 px-2 py-1 w-full"
+                      className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
                     />
                   </td>
 
                   {/* BALANCE */}
-                  <td className="px-3 py-2">
+                  <td className="border border-gray-700 px-2 py-2">
                     <input
                       type="number"
                       value={s.balance}
                       onChange={(e) => handleSavingChange(s.id!, "balance", e.target.value)}
-                      className="bg-gray-700/50 px-2 py-1 w-full"
+                      className="bg-gray-800 text-gray-200 px-2 py-1 rounded w-full"
                     />
                   </td>
 
-                  {/* DELETE */}
-                  <td className="px-3 py-2">
-                    <button
-                      onClick={() => deleteSaving(s.id!)}
-                      className="bg-red-600 px-3 py-2 rounded text-white flex items-center gap-1 transform transition-transform duration-150 hover:scale-105 active:scale-95"
-                    >
-                      <FaTrash /> Delete
-                    </button>
+                  {/* DELETE ONLY in Actions column */}
+                  <td className="border border-gray-700 px-2 py-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => deleteSaving(s.id!)}
+                        className="bg-red-600 px-2 py-1 rounded text-xs"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
-
-              {/* TOTALS */}
-              <tr className="bg-gray-900 text-white font-bold">
-                <td colSpan={3} className="px-3 py-2 border-b border-gray-600">
-                  TOTAL
-                </td>
-                <td className="px-3 py-2 border-b border-gray-600 text-right">
-                  {totals.amount}
-                </td>
-                <td className="px-3 py-2 border-b border-gray-600 text-right">
-                  {totals.interest}
-                </td>
-                <td className="px-3 py-2 border-b border-gray-600 text-right">
-                  {totals.balance}
-                </td>
-                <td className="px-3 py-2 border-b border-gray-600"></td>
-              </tr>
             </tbody>
           </table>
         </div>

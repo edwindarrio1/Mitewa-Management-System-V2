@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  HiOutlineUsers, 
-  HiOutlineHome, 
-  HiOutlineCurrencyDollar, 
-  HiOutlineChartBar, 
-  HiOutlineDocumentText 
+import {
+  HiOutlineUsers,
+  HiOutlineHome,
+  HiOutlineCurrencyDollar,
+  HiOutlineChartBar,
+  HiOutlineDocumentText,
+  HiOutlineChat,
+  HiOutlineUserAdd,
+  HiOutlineExclamation
 } from "react-icons/hi";
 import { Dispatch, SetStateAction } from "react";
 
@@ -22,12 +25,15 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }: AdminSideb
   const navItems = [
     { label: "Dashboard", href: "/admin", icon: <HiOutlineHome size={20} /> },
     { label: "Members", href: "/admin/members", icon: <HiOutlineUsers size={20} /> },
+    { label: "Invite Users", href: "/admin/invite", icon: <HiOutlineUserAdd size={20} /> },
     { label: "Loans", href: "/admin/loans", icon: <HiOutlineCurrencyDollar size={20} /> },
     { label: "Savings", href: "/admin/savings", icon: <HiOutlineCurrencyDollar size={20} /> },
     { label: "Investments & Risks", href: "/admin/investments", icon: <HiOutlineChartBar size={20} /> },
     { label: "Collections & Expenses", href: "/admin/expenses", icon: <HiOutlineDocumentText size={20} /> },
+    { label: "Messages", href: "/admin/messages", icon: <HiOutlineChat size={20} /> },
     { label: "Reports", href: "/admin/reports", icon: <HiOutlineDocumentText size={20} /> },
     { label: "Analysis", href: "/admin/analysis", icon: <HiOutlineChartBar size={20} /> },
+    { label: "Maintenance", href: "/admin/maintenance", icon: <HiOutlineExclamation size={20} /> },
   ];
 
   return (
@@ -46,9 +52,8 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }: AdminSideb
           <Link
             key={item.href}
             href={item.href}
-            className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-700/50 transition-colors duration-200 ${
-              pathname === item.href ? "bg-gray-700/70" : ""
-            }`}
+            className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-700/50 transition-colors duration-200 ${pathname === item.href ? "bg-gray-700/70" : ""
+              }`}
           >
             <span className="text-cyan-400">{item.icon}</span>
             {!isCollapsed && <span>{item.label}</span>}
