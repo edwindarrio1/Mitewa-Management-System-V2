@@ -108,7 +108,7 @@ export default function HomePage() {
 
         {/* Footer */}
         <footer className="mt-24 text-gray-500 text-sm">
-          © {new Date().getFullYear()} Mitewa Management System | Powered by Next.js + Firebase + Tailwind CSS
+          © {new Date().getFullYear()} Mitewa Management System By Edwin
         </footer>
       </div>
     </main>
