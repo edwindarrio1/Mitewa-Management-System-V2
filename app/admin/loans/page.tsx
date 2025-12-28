@@ -53,7 +53,14 @@ export default function LoansPage() {
   const [loans, setLoans] = useState<Loan[]>([]);
   const [loanRequests, setLoanRequests] = useState<LoanRequest[]>([]);
 
-  const toNumber = (v: any) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
+  const toNumber = (value: any) => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const cleaned = value.replace(/[^0-9.-]/g, "");
+      return parseFloat(cleaned) || 0;
+    }
+    return 0;
+  };
 
   // Load Loan Requests
   const loadLoanRequests = async () => {

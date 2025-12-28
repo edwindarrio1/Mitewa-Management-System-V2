@@ -36,7 +36,14 @@ export default function SavingsPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [savings, setSavings] = useState<Saving[]>([]);
 
-  const toNumber = (v: any) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
+  const toNumber = (value: any) => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const cleaned = value.replace(/[^0-9.-]/g, "");
+      return parseFloat(cleaned) || 0;
+    }
+    return 0;
+  };
 
   // --------------------------------------------------------
   // UPDATED recalc() — interest only applies when dueDate is reached

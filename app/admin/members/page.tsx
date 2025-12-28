@@ -50,7 +50,11 @@ export default function MembersPage() {
 
   const toNumber = (value: any) => {
     if (typeof value === "number") return value;
-    if (typeof value === "string") return parseFloat(value) || 0;
+    if (typeof value === "string") {
+      // Remove commas and other non-numeric characters except decimal point and sign
+      const cleaned = value.replace(/[^0-9.-]/g, "");
+      return parseFloat(cleaned) || 0;
+    }
     return 0;
   };
 
@@ -166,42 +170,87 @@ export default function MembersPage() {
       const data = new Uint8Array(await file.arrayBuffer());
       const workbook = XLSX.read(data, { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json: any[] = XLSX.utils.sheet_to_json(sheet);
 
-      const mappedData: MemberData[] = json
-        .filter((row) => row["NAME"] || row["name"] || row["Member Name"] || row["Name"])
-        .filter((row) => {
-          const name = String(row["NAME"] || row["name"] || "").toUpperCase();
-          return name !== "TOTAL" && name !== "SUBTOTAL";
-        })
+      // Use header: 1 to get an array of arrays (much more reliable for messy files)
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+      if (rows.length < 1) {
+        alert("The Excel file seems to be empty.");
+        return;
+      }
+
+      // 1. Find the header row (the one that contains "NAME" or similar)
+      const standardize = (s: any) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      let headerRowIndex = -1;
+      for (let i = 0; i < Math.min(rows.length, 20); i++) {
+        if (rows[i].some(cell => ["name", "membername", "member"].includes(standardize(cell)))) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        alert("Could not find a header row with 'NAME' column. Please check your Excel format.");
+        return;
+      }
+
+      const headers = rows[headerRowIndex].map(h => standardize(h));
+      const dataRows = rows.slice(headerRowIndex + 1);
+
+      const mappedData: MemberData[] = dataRows
         .map((row, i) => {
-          const existingNos = members.map(m => m.no);
-          const rowNo = toNumber(row["NO"] || row["no"] || row["No"]);
+          const getVal = (possibleKeys: string[]) => {
+            for (const pk of possibleKeys) {
+              const stdPk = standardize(pk);
+              const colIndex = headers.indexOf(stdPk);
+              if (colIndex !== -1 && row[colIndex] !== undefined && row[colIndex] !== null) {
+                return row[colIndex];
+              }
+            }
+            return 0;
+          };
+
+          const name = String(getVal(["NAME", "Member Name", "Member"]) || "").trim();
+          if (!name || name.toUpperCase() === "TOTAL" || name.toUpperCase() === "SUBTOTAL") return null;
+
+          const rowNo = toNumber(getVal(["NO", "no.", "no"]));
           const finalNo = rowNo > 0 ? rowNo : (members.length + i + 1);
 
           return {
             id: crypto.randomUUID(),
             no: finalNo,
-            name: String(row["NAME"] || row["name"] || row["Member Name"] || row["Name"] || ""),
-            noOfShares: toNumber(row["NO OF SHARES"] || row["noOfShares"] || row["Shares Count"] || row["No. of Shares"]),
-            amountOfShares: toNumber(row["AMOUNT OF SHARES"] || row["amountOfShares"] || row["Shares Amount"] || row["Amount Shares"]),
-            dividend: toNumber(row["DIVIDEND"] || row["dividend"]),
-            hon: toNumber(row["HON"] || row["hon"]),
-            investmentArrears: toNumber(row["INVESTMENT ARREARS"] || row["investmentArrears"] || row["Investment Arrears"]),
-            riskFundArrears: toNumber(row["RISK FUND ARREARS"] || row["riskFundArrears"] || row["Risk Fund Arrears"]),
-            arrearsOnShares: toNumber(row["ARREARS ON SHARES"] || row["arrearsOnShares"] || row["Arrears on Shares"]),
-            arrearsOnLoans: toNumber(row["ARREARS ON LOANS"] || row["arrearsOnLoans"] || row["Arrears on loans"]),
-            prevYearArrearsBalance: toNumber(row["PREVIOUS YEAR ARREARS BALANCE"] || row["prevYearArrearsBalance"] || row["Previous Year Arrears Balance"] || row["PREV ARREARS"]),
-            absenteeism: toNumber(row["ABSENTEEISM"] || row["absenteeism"] || row["Absenteeism"]),
-            arrearsOnWelfare: toNumber(row["ARREARS ON WELFARE"] || row["arrearsOnWelfare"] || row["Arrears On Welfare"]),
-            lessAdvanced: toNumber(row["LESS ADVANCED"] || row["lessAdvanced"] || row["Less Advanced"]),
-            netPayAmount: toNumber(row["NET PAY AMOUNT"] || row["netPayAmount"] || row["Net Pay Amount"]),
+            name: name,
+            noOfShares: toNumber(getVal(["NO OF SHARES", "No. of Shares", "Shares Count", "noOfShares", "No. Shares"])),
+            amountOfShares: toNumber(getVal(["AMOUNT OF SHARES", "Amount Shares", "Amount of Shares", "amountOfShares", "Shares Amount"])),
+            dividend: toNumber(getVal(["DIVIDEND", "Dividends", "dividend", "dividends", "Div"])),
+            hon: toNumber(getVal(["HON", "hon", "Hon"])),
+            investmentArrears: toNumber(getVal(["INVESTMENT ARREARS", "Investment Arrears", "invest arrears", "investmentArrears", "Arrears Investment"])),
+            riskFundArrears: toNumber(getVal(["RISK FUND ARREARS", "Risk Fund Arrears", "risk arrears", "riskFundArrears", "Arrears Risk Fund"])),
+            arrearsOnShares: toNumber(getVal(["ARREARS ON SHARES", "Arrears on Shares", "arrears on share", "arrearsOnShares", "Share Arrears"])),
+            arrearsOnLoans: toNumber(getVal(["ARREARS ON LOANS", "Arrears on loans", "loan arrears", "arrearsOnLoans", "Loan Arrears"])),
+            prevYearArrearsBalance: toNumber(getVal(["PREVIOUS YEAR ARREARS BALANCE", "Prev Year Arrears Balance", "PREV ARREARS", "prevYearArrearsBalance", "PREV. YEAR BALANCE", "Previous Year balance", "prev year balance"])),
+            absenteeism: toNumber(getVal(["ABSENTEEISM", "Absenteeism", "absent", "absenteeism", "Absence"])),
+            arrearsOnWelfare: toNumber(getVal([
+              "ARREARS ON WELFARE",
+              "Arrears On Welfare",
+              "Arrears on Welfare",
+              "Welfare Arrears",
+              "arrearsOnWelfare",
+              "WELFARE",
+              "WELFARE ARREARS",
+              "ARREARS WELFARE",
+              "WELFARE BAL",
+              "Arrears On Welfare Balance"
+            ])),
+            lessAdvanced: toNumber(getVal(["LESS ADVANCED", "Less Advanced", "lessAdvanced", "Advanced"])),
+            netPayAmount: toNumber(getVal(["NET PAY AMOUNT", "Net Pay Amount", "Net Pay", "netPayAmount"])),
             period: selectedPeriod,
           };
-        });
+        })
+        .filter((m): m is MemberData => m !== null);
 
       if (mappedData.length === 0) {
-        alert("No valid data found in the Excel file.");
+        alert("No valid member data found after the header row.");
         return;
       }
 
@@ -209,9 +258,8 @@ export default function MembersPage() {
       alert(`Successfully imported ${mappedData.length} members. Don't forget to click 'Save Changes' to persist to the database.`);
     } catch (err) {
       console.error("Import failed:", err);
-      alert("Failed to import Excel file. Please check the file format.");
+      alert("Failed to import Excel file. Please ensure it's a valid .xlsx or .xls file.");
     } finally {
-      // Reset input so the same file can be selected again if needed
       e.target.value = "";
     }
   };
