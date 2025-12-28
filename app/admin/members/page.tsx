@@ -386,20 +386,20 @@ export default function MembersPage() {
 
   return (
     <AdminLayout>
-      <div className="mb-4">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <input
           value={tableTitle}
           onChange={(e) => setTableTitle(e.target.value)}
-          className="text-2xl font-bold px-2 py-1 border-b-2 border-gray-700 bg-transparent text-gray-100"
+          className="text-xl md:text-2xl font-bold px-2 py-1 border-b-2 border-gray-700 bg-transparent text-gray-100 w-full md:w-auto focus:border-emerald-500 outline-none"
           placeholder="Table Title"
         />
       </div>
 
-      <div className="flex flex-wrap gap-4 mb-4 items-center">
+      <div className="flex flex-wrap gap-2 md:gap-4 mb-6 items-center">
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value)}
-          className="bg-gray-700/50 text-gray-200 px-3 py-2 rounded-md"
+          className="bg-gray-700/50 text-gray-200 px-3 py-2 rounded-md border border-gray-600 focus:border-emerald-500 outline-none w-full sm:w-auto"
         >
           {allPeriods.map((p) => (
             <option key={p} value={p}>{p}</option>
@@ -408,60 +408,60 @@ export default function MembersPage() {
 
         <input
           type="text"
-          placeholder="Search by name..."
+          placeholder="Search name..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="px-3 py-2 rounded-md bg-gray-700/50 text-gray-200"
+          className="px-3 py-2 rounded-md bg-gray-700/50 text-gray-200 border border-gray-600 focus:border-emerald-500 outline-none w-full sm:w-auto sm:flex-1"
         />
 
-        <button
-          onClick={addNewMember}
-          className="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg transition-transform transform hover:scale-105"
-        >
-          <Plus size={16} /> Add Member
-        </button>
+        <div className="flex flex-wrap gap-2 w-full lg:w-auto justify-start items-center">
+          <button
+            onClick={addNewMember}
+            className="flex-1 sm:flex-none justify-center bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 shadow-lg transition-all active:scale-95 text-sm"
+          >
+            <Plus size={16} /> Add Member
+          </button>
 
-        <button
-          onClick={saveChanges}
-          className="bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg transition-transform transform hover:scale-105"
-        >
-          <Save size={16} /> Save Changes
-        </button>
+          <button
+            onClick={saveChanges}
+            className="flex-1 sm:flex-none justify-center bg-emerald-500 hover:bg-emerald-600 px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 shadow-lg transition-all active:scale-95 text-sm"
+          >
+            <Save size={16} /> Sync
+          </button>
 
-        <button
-          onClick={deleteAllMembers}
-          className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg transition-transform transform hover:scale-105"
-        >
-          <Trash2 size={16} /> Delete All
-        </button>
+          <button
+            onClick={deleteAllMembers}
+            className="flex-1 sm:flex-none justify-center bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 shadow-lg transition-all active:scale-95 text-sm"
+          >
+            <Trash2 size={16} /> Delete All
+          </button>
 
-        {/* 🆕 START: EXPORT TO EXCEL BUTTON */}
-        <button
-          onClick={exportToExcel}
-          className="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg transition-transform transform hover:scale-105"
-        >
-          <Download size={16} /> Export as Excel
-        </button>
-        {/* 🆕 END: EXPORT TO EXCEL BUTTON */}
+          <button
+            onClick={exportToExcel}
+            className="flex-1 sm:flex-none justify-center bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 shadow-lg transition-all active:scale-95 text-sm"
+          >
+            <Download size={16} /> Excel
+          </button>
 
-        <button
-          onClick={addNewFinancialYear}
-          className="bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg transition-transform transform hover:scale-105"
-        >
-          <FileText size={16} /> New Financial Year
-        </button>
+          <button
+            onClick={addNewFinancialYear}
+            className="flex-1 sm:flex-none justify-center bg-purple-500 hover:bg-purple-600 px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 shadow-lg transition-all active:scale-95 text-sm"
+          >
+            <Plus size={16} /> Year
+          </button>
 
-        <label
-          className="bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg cursor-pointer transition-transform transform hover:scale-105"
-        >
-          <Upload size={16} /> Import Excel
-          <input
-            type="file"
-            accept=".xlsx, .xls"
-            onChange={importFromExcel}
-            className="hidden"
-          />
-        </label>
+          <label
+            className="flex-1 sm:flex-none justify-center bg-yellow-500 hover:bg-yellow-600 px-4 py-2 rounded-lg text-white font-semibold flex items-center gap-2 shadow-lg cursor-pointer transition-all active:scale-95 text-sm"
+          >
+            <Upload size={16} /> Import
+            <input
+              type="file"
+              accept=".xlsx, .xls"
+              onChange={importFromExcel}
+              className="hidden"
+            />
+          </label>
+        </div>
       </div>
 
       <div ref={printRef} className="overflow-x-auto rounded-xl shadow-lg border border-gray-700">

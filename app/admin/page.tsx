@@ -116,52 +116,54 @@ export default function AdminDashboardPage() {
   return (
     <ProtectedAdmin>
       <AdminLayout>
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {stats.map((stat) => (
-            <div
-              key={stat.title}
-              className="
-                bg-gradient-to-br from-gray-800/70 to-gray-900/40
-                backdrop-blur-xl rounded-2xl p-6 
-                flex items-center gap-4 
-                hover:scale-105 hover:shadow-2xl hover:shadow-emerald-600/10
-                transition-all duration-300 border border-gray-700/40
-              "
-            >
-              <div className="p-3 bg-gray-900/40 rounded-xl border border-gray-700/50">
-                {stat.icon}
+        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+            {stats.map((stat) => (
+              <div
+                key={stat.title}
+                className="
+                  bg-gradient-to-br from-gray-800/70 to-gray-900/40
+                  backdrop-blur-xl rounded-2xl p-4 md:p-6 
+                  flex items-center gap-4 
+                  hover:scale-105 hover:shadow-2xl hover:shadow-emerald-600/10
+                  transition-all duration-300 border border-gray-700/40
+                "
+              >
+                <div className="p-3 bg-gray-900/40 rounded-xl border border-gray-700/50 shrink-0">
+                  {stat.icon}
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-gray-400 text-xs md:text-sm truncate">{stat.title}</p>
+                  <p className="text-2xl md:text-3xl font-extrabold text-white">
+                    {stat.value.toLocaleString()}
+                  </p>
+                </div>
               </div>
+            ))}
+          </div>
 
-              <div>
-                <p className="text-gray-400 text-sm">{stat.title}</p>
-                <p className="text-3xl font-extrabold text-white">
-                  {stat.value.toLocaleString()}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
+          {/* Welcome Message */}
+          <div
+            className="
+              mt-8 md:mt-12 
+              bg-gradient-to-br from-gray-800/60 to-gray-900/40 
+              backdrop-blur-xl rounded-2xl p-6 md:p-8 
+              text-gray-300 border border-gray-700/30
+              shadow-lg shadow-emerald-500/5
+            "
+          >
+            <h2 className="text-xl md:text-2xl font-bold text-emerald-400 mb-2 tracking-wide drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]">
+              Welcome, {adminName}!
+            </h2>
 
-        {/* Welcome Message */}
-        <div
-          className="
-            mt-12 
-            bg-gradient-to-br from-gray-800/60 to-gray-900/40 
-            backdrop-blur-xl rounded-2xl p-8 
-            text-gray-300 border border-gray-700/30
-            shadow-lg shadow-emerald-500/5
-          "
-        >
-          <h2 className="text-2xl font-bold text-emerald-400 mb-2 tracking-wide drop-shadow-[0_0_6px_rgba(16,185,129,0.4)]">
-            Welcome, {adminName}!
-          </h2>
-
-          <p className="leading-relaxed text-gray-300/90">
-            This dashboard allows you to manage members, track loans, view
-            savings and shares, monitor investments, and maintain expenses — all
-            in one secure, easy-to-use platform.
-          </p>
+            <p className="leading-relaxed text-gray-300/90 text-sm md:text-base">
+              This dashboard allows you to manage members, track loans, view
+              savings and shares, monitor investments, and maintain expenses — all
+              in one secure, easy-to-use platform.
+            </p>
+          </div>
         </div>
       </AdminLayout>
     </ProtectedAdmin>

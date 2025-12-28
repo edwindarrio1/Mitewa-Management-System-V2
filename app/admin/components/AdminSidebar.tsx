@@ -17,9 +17,16 @@ import { Dispatch, SetStateAction } from "react";
 interface AdminSidebarProps {
   isCollapsed: boolean;
   setIsCollapsed: Dispatch<SetStateAction<boolean>>;
+  isMobileMenuOpen: boolean;
+  setIsMobileMenuOpen: Dispatch<SetStateAction<boolean>>;
 }
 
-export default function AdminSidebar({ isCollapsed, setIsCollapsed }: AdminSidebarProps) {
+export default function AdminSidebar({
+  isCollapsed,
+  setIsCollapsed,
+  isMobileMenuOpen,
+  setIsMobileMenuOpen
+}: AdminSidebarProps) {
   const pathname = usePathname();
 
   const navItems = [
@@ -37,26 +44,37 @@ export default function AdminSidebar({ isCollapsed, setIsCollapsed }: AdminSideb
   ];
 
   return (
-    <aside className={`flex flex-col bg-gray-800 border-r border-gray-700 transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"}`}>
+    <aside className={`
+      fixed inset-y-0 left-0 z-30 md:relative md:translate-x-0 transform transition-all duration-300 ease-in-out
+      flex flex-col bg-gray-800 border-r border-gray-700
+      ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"}
+      ${isCollapsed ? "md:w-20" : "md:w-64"}
+      w-64
+    `}>
       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-700">
-        <span className={`text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 ${isCollapsed ? "hidden" : "block"}`}>
+        <span className={`text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-cyan-500 ${isCollapsed ? "md:hidden" : "block"}`}>
           Mitewa Admin
         </span>
-        <button className="text-gray-400 hover:text-white" onClick={() => setIsCollapsed(!isCollapsed)}>
-          {isCollapsed ? "➡️" : "⬅️"}
+        <button
+          className="text-gray-400 hover:text-white p-2"
+          onClick={() => setIsCollapsed(!isCollapsed)}
+        >
+          <span className="hidden md:inline">{isCollapsed ? "➡️" : "⬅️"}</span>
+          <span className="md:hidden" onClick={() => setIsMobileMenuOpen(false)}>✕</span>
         </button>
       </div>
 
-      <nav className="flex-1 mt-6">
+      <nav className="flex-1 mt-6 overflow-y-auto">
         {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
+            onClick={() => setIsMobileMenuOpen(false)}
             className={`flex items-center gap-4 px-4 py-3 hover:bg-gray-700/50 transition-colors duration-200 ${pathname === item.href ? "bg-gray-700/70" : ""
               }`}
           >
             <span className="text-cyan-400">{item.icon}</span>
-            {!isCollapsed && <span>{item.label}</span>}
+            <span className={`${isCollapsed ? "md:hidden" : "block"}`}>{item.label}</span>
           </Link>
         ))}
       </nav>

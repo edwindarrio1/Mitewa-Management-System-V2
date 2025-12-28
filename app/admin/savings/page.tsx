@@ -216,15 +216,15 @@ export default function SavingsPage() {
 
   return (
     <AdminLayout>
-      <div className="p-5">
+      <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
 
-        {/* MEMBER SELECT */}
-        <div className="flex gap-3 mb-4 items-center">
-          <label className="text-gray-200">Member:</label>
+        {/* Member Select */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+          <label className="text-gray-300 font-medium shrink-0">Select Member:</label>
           <select
             value={selectedMemberId}
             onChange={(e) => setSelectedMemberId(e.target.value)}
-            className="bg-gray-700 text-gray-200 px-3 py-2 rounded-md"
+            className="bg-gray-700 text-gray-200 px-4 py-2 rounded-lg w-full sm:w-72 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
           >
             {members.length === 0 && <option>Loading members...</option>}
             {members.map((m) => (
@@ -235,22 +235,30 @@ export default function SavingsPage() {
           </select>
         </div>
 
-        {/* BUTTONS */}
-        <div className="flex gap-3 mb-4">
-          <button onClick={addSavingRow} className={`bg-blue-600 ${buttonClasses}`}>
-            <FaPlus /> Add Contribution
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2 md:gap-3 mb-6">
+          <button
+            onClick={addSavingRow}
+            className="flex-1 sm:flex-none justify-center bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-all active:scale-95 text-sm"
+          >
+            <FaPlus /> Contribution
           </button>
-          {/* General SAVE button already here, correctly placed */}
-          <button onClick={saveSavings} className={`bg-green-600 ${buttonClasses}`}>
-            <FaSave /> Save
+          <button
+            onClick={saveSavings}
+            className="flex-1 sm:flex-none justify-center bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-all active:scale-95 text-sm shadow-lg shadow-emerald-500/20"
+          >
+            <FaSave /> Sync
           </button>
-          <label className={`bg-yellow-600 ${buttonClasses} cursor-pointer`}>
+          <button
+            onClick={exportExcel}
+            className="flex-1 sm:flex-none justify-center bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-all active:scale-95 text-sm"
+          >
+            <FaFileExport /> Excel
+          </button>
+          <label className="flex-1 sm:flex-none justify-center bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold cursor-pointer transition-all active:scale-95 text-sm">
             <FaFileImport /> Import
             <input type="file" accept=".xlsx" onChange={importExcel} className="hidden" />
           </label>
-          <button onClick={exportExcel} className={`bg-purple-600 ${buttonClasses}`}>
-            <FaFileExport /> Export
-          </button>
         </div>
 
         {/* TABLE - Updated to match Loans Page Style */}

@@ -2,8 +2,6 @@
 
 import { useRef, useState, useEffect } from "react";
 import AdminLayout from "../Admin-Layout";
-import html2canvas from "html2canvas";
-import { jsPDF } from "jspdf";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 
@@ -171,6 +169,8 @@ export default function ReportsPage() {
     }
   };
 
+
+
   // -------- AUTO-CALC FOR TABLES --------
   useEffect(() => {
     const recalcTotals = () => {
@@ -239,89 +239,83 @@ export default function ReportsPage() {
 
   return (
     <AdminLayout>
-      <div className="flex flex-col gap-6 p-6 text-gray-900 dark:text-gray-100">
+      <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6 text-gray-900 dark:text-gray-100">
 
-        {/* Header */}
-        <div className="flex flex-col gap-2 bg-emerald-700 text-white px-6 py-3 rounded-md shadow print:hidden">
+        {/* Responsive Header */}
+        <div className="flex flex-col gap-3 bg-emerald-700 text-white px-4 md:px-6 py-4 rounded-md shadow print:hidden">
 
-          {/* Top Row */}
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold">MITEWA Treasurer’s Report</h1>
+          {/* Top Row: Title and Period Selection */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <h1 className="text-lg md:text-xl font-semibold">MITEWA Treasurer’s Report</h1>
 
             <div className="flex items-center gap-3">
               <input
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                className="border border-gray-300 text-gray-900 rounded-md px-3 py-1 text-sm"
+                className="border border-gray-300 text-gray-900 rounded-md px-3 py-1.5 text-sm w-full sm:w-32 focus:ring-2 focus:ring-emerald-400 outline-none"
               />
 
               <button
                 onClick={handleSave}
                 disabled={isSaving || isLoading}
-                className={`px-4 py-2 rounded-md text-white text-sm font-medium shadow transition-colors ${
-                  isSaving || isLoading
-                    ? "bg-gray-500 cursor-not-allowed"
+                className={`px-4 py-1.5 rounded-md text-white text-sm font-medium shadow transition-all active:scale-95 ${isSaving || isLoading
+                    ? "bg-emerald-800/50 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700"
-                }`}
+                  }`}
               >
                 {isSaving ? "Saving..." : "💾 Save"}
               </button>
-
-              {/* ❌ REMOVED PRINT BUTTON */}
             </div>
           </div>
 
-          {/* Bottom Row */}
-          <div className="flex items-center justify-between pt-2 border-t border-emerald-600">
+          {/* Bottom Row: Editor Controls and Actions */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-3 border-t border-emerald-600">
 
-            {/* Editor Tools */}
-            <div className="flex items-center gap-2">
+            {/* Rich-Text Tools */}
+            <div className="flex flex-wrap items-center gap-1 md:gap-2">
               <button
                 onClick={() => handleFormat("bold")}
                 title="Bold"
-                className="w-8 h-8 rounded hover:bg-emerald-600 font-bold text-lg leading-none"
+                className="w-9 h-9 md:w-8 md:h-8 rounded hover:bg-emerald-600 font-bold text-lg leading-none transition-colors"
               >
                 B
               </button>
               <button
                 onClick={() => handleFormat("italic")}
                 title="Italic"
-                className="w-8 h-8 rounded hover:bg-emerald-600 italic text-lg leading-none"
+                className="w-9 h-9 md:w-8 md:h-8 rounded hover:bg-emerald-600 italic text-lg leading-none transition-colors"
               >
                 I
               </button>
               <button
                 onClick={() => handleFormat("underline")}
                 title="Underline"
-                className="w-8 h-8 rounded hover:bg-emerald-600 underline text-lg leading-none"
+                className="w-9 h-9 md:w-8 md:h-8 rounded hover:bg-emerald-600 underline text-lg leading-none transition-colors"
               >
                 U
               </button>
-              <div className="w-px h-6 bg-emerald-600 mx-2"></div>
+              <div className="w-px h-6 bg-emerald-600 mx-1 md:mx-2"></div>
               <button
                 onClick={() => handleFormat("insertUnorderedList")}
                 title="Bullet List"
-                className="w-8 h-8 rounded hover:bg-emerald-600"
+                className="w-9 h-9 md:w-8 md:h-8 rounded hover:bg-emerald-600 flex items-center justify-center transition-colors text-lg"
               >
                 •
               </button>
               <button
                 onClick={() => handleFormat("insertOrderedList")}
                 title="Numbered List"
-                className="w-8 h-8 rounded hover:bg-emerald-600"
+                className="w-9 h-9 md:w-8 md:h-8 rounded hover:bg-emerald-600 flex items-center justify-center transition-colors font-mono"
               >
                 #
               </button>
             </div>
 
-            {/* Export Actions */}
-            <div className="flex items-center gap-3">
-
-              {/* ❌ REMOVED Export PDF BUTTON */}
-
+            {/* Actions */}
+            <div className="w-full md:w-auto">
               <button
                 onClick={handleExportWord}
-                className="bg-emerald-600 hover:bg-emerald-800 px-4 py-2 rounded-md text-white text-sm font-medium shadow transition-colors"
+                className="w-full md:w-auto bg-emerald-600 hover:bg-emerald-800 px-6 py-2 rounded-md text-white text-sm font-medium shadow transition-colors border border-emerald-500"
               >
                 Export Word
               </button>
@@ -329,20 +323,24 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Report Area */}
-        {isLoading ? (
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-20 text-center">
-            <p className="text-lg text-gray-500">Loading report for {year}...</p>
-          </div>
-        ) : (
-          <div
-            ref={printRef}
-            dangerouslySetInnerHTML={{ __html: reportContent }}
-            contentEditable
-            suppressContentEditableWarning
-            className="report-container bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-md p-6 space-y-8 border border-gray-200 dark:border-gray-700 min-h-[800px] prose prose-sm max-w-none"
-          />
-        )}
+        {/* Report Canvas */}
+        <div className="w-full overflow-hidden">
+          {isLoading ? (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-10 md:p-20 text-center">
+              <p className="text-lg text-gray-500 animate-pulse">Loading report for {year}...</p>
+            </div>
+          ) : (
+            <div className="rounded-lg shadow-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto scrollbar-thin scrollbar-track-gray-100 scrollbar-thumb-emerald-500">
+              <div
+                ref={printRef}
+                dangerouslySetInnerHTML={{ __html: reportContent }}
+                contentEditable
+                suppressContentEditableWarning
+                className="report-container p-6 md:p-10 min-w-[750px] md:min-w-0 md:w-full space-y-8 prose prose-sm max-w-none text-gray-900 dark:text-gray-100 min-h-[800px]"
+              />
+            </div>
+          )}
+        </div>
       </div>
     </AdminLayout>
   );

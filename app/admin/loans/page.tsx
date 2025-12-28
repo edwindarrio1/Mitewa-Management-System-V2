@@ -347,13 +347,13 @@ export default function LoansPage() {
         {/* ACTIVE LOANS TAB */}
         {activeTab === "loans" && (
           <>
-            {/* MEMBER SELECT */}
-            <div className="flex gap-3 mb-4 items-center">
-              <label className="text-gray-200">Member:</label>
+            {/* Member Selection */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6 bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+              <label className="text-gray-300 font-medium shrink-0">Select Member:</label>
               <select
                 value={selectedMemberId}
                 onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="bg-gray-700 text-gray-200 px-3 py-2 rounded-md"
+                className="bg-gray-700 text-gray-200 px-4 py-2 rounded-lg w-full sm:w-72 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
               >
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -363,19 +363,27 @@ export default function LoansPage() {
               </select>
             </div>
 
-            {/* BUTTONS */}
-            <div className="flex gap-3 mb-4">
-              <button onClick={addLoanRow} className={`bg-blue-600 ${buttonClasses}`}>
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-2 md:gap-3 mb-6">
+              <button
+                onClick={addLoanRow}
+                className="flex-1 sm:flex-none justify-center bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-all active:scale-95 text-sm"
+              >
                 <FaPlus /> Add Loan
               </button>
-              {/* Added General Save Button */}
-              <button onClick={saveAllLoans} className={`bg-green-600 ${buttonClasses}`}>
-                <FaSave /> Save
+              <button
+                onClick={saveAllLoans}
+                className="flex-1 sm:flex-none justify-center bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-all active:scale-95 text-sm shadow-lg shadow-emerald-500/20"
+              >
+                <FaSave /> Sync
               </button>
-              <button onClick={exportToExcel} className={`bg-green-600 ${buttonClasses}`}>
-                <FaFileExport /> Export
+              <button
+                onClick={exportToExcel}
+                className="flex-1 sm:flex-none justify-center bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold transition-all active:scale-95 text-sm"
+              >
+                <FaFileExport /> Excel
               </button>
-              <label className={`bg-purple-600 ${buttonClasses} cursor-pointer`}>
+              <label className="flex-1 sm:flex-none justify-center bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg flex items-center gap-2 text-white font-semibold cursor-pointer transition-all active:scale-95 text-sm">
                 <FaFileImport /> Import
                 <input type="file" accept=".xlsx,.xls" onChange={importFromExcel} className="hidden" />
               </label>
