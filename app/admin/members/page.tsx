@@ -197,57 +197,57 @@ export default function MembersPage() {
       const headers = rows[headerRowIndex].map(h => standardize(h));
       const dataRows = rows.slice(headerRowIndex + 1);
 
-      const mappedData: MemberData[] = dataRows
-        .map((row, i) => {
-          const getVal = (possibleKeys: string[]) => {
-            for (const pk of possibleKeys) {
-              const stdPk = standardize(pk);
-              const colIndex = headers.indexOf(stdPk);
-              if (colIndex !== -1 && row[colIndex] !== undefined && row[colIndex] !== null) {
-                return row[colIndex];
-              }
+      const mappedData = dataRows.reduce((acc: MemberData[], row, i) => {
+        const getVal = (possibleKeys: string[]) => {
+          for (const pk of possibleKeys) {
+            const stdPk = standardize(pk);
+            const colIndex = headers.indexOf(stdPk);
+            if (colIndex !== -1 && row[colIndex] !== undefined && row[colIndex] !== null) {
+              return row[colIndex];
             }
-            return 0;
-          };
+          }
+          return 0;
+        };
 
-          const name = String(getVal(["NAME", "Member Name", "Member"]) || "").trim();
-          if (!name || name.toUpperCase() === "TOTAL" || name.toUpperCase() === "SUBTOTAL") return null;
+        const name = String(getVal(["NAME", "Member Name", "Member"]) || "").trim();
+        if (!name || name.toUpperCase() === "TOTAL" || name.toUpperCase() === "SUBTOTAL") return acc;
 
-          const rowNo = toNumber(getVal(["NO", "no.", "no"]));
-          const finalNo = rowNo > 0 ? rowNo : (members.length + i + 1);
+        const rowNo = toNumber(getVal(["NO", "no.", "no"]));
+        const finalNo = rowNo > 0 ? rowNo : (members.length + i + 1);
 
-          return {
-            id: crypto.randomUUID(),
-            no: finalNo,
-            name: name,
-            noOfShares: toNumber(getVal(["NO OF SHARES", "No. of Shares", "Shares Count", "noOfShares", "No. Shares"])),
-            amountOfShares: toNumber(getVal(["AMOUNT OF SHARES", "Amount Shares", "Amount of Shares", "amountOfShares", "Shares Amount"])),
-            dividend: toNumber(getVal(["DIVIDEND", "Dividends", "dividend", "dividends", "Div"])),
-            hon: toNumber(getVal(["HON", "hon", "Hon"])),
-            investmentArrears: toNumber(getVal(["INVESTMENT ARREARS", "Investment Arrears", "invest arrears", "investmentArrears", "Arrears Investment"])),
-            riskFundArrears: toNumber(getVal(["RISK FUND ARREARS", "Risk Fund Arrears", "risk arrears", "riskFundArrears", "Arrears Risk Fund"])),
-            arrearsOnShares: toNumber(getVal(["ARREARS ON SHARES", "Arrears on Shares", "arrears on share", "arrearsOnShares", "Share Arrears"])),
-            arrearsOnLoans: toNumber(getVal(["ARREARS ON LOANS", "Arrears on loans", "loan arrears", "arrearsOnLoans", "Loan Arrears"])),
-            prevYearArrearsBalance: toNumber(getVal(["PREVIOUS YEAR ARREARS BALANCE", "Prev Year Arrears Balance", "PREV ARREARS", "prevYearArrearsBalance", "PREV. YEAR BALANCE", "Previous Year balance", "prev year balance"])),
-            absenteeism: toNumber(getVal(["ABSENTEEISM", "Absenteeism", "absent", "absenteeism", "Absence"])),
-            arrearsOnWelfare: toNumber(getVal([
-              "ARREARS ON WELFARE",
-              "Arrears On Welfare",
-              "Arrears on Welfare",
-              "Welfare Arrears",
-              "arrearsOnWelfare",
-              "WELFARE",
-              "WELFARE ARREARS",
-              "ARREARS WELFARE",
-              "WELFARE BAL",
-              "Arrears On Welfare Balance"
-            ])),
-            lessAdvanced: toNumber(getVal(["LESS ADVANCED", "Less Advanced", "lessAdvanced", "Advanced"])),
-            netPayAmount: toNumber(getVal(["NET PAY AMOUNT", "Net Pay Amount", "Net Pay", "netPayAmount"])),
-            period: selectedPeriod,
-          };
-        })
-        .filter((m): m is MemberData => m !== null);
+        acc.push({
+          id: crypto.randomUUID(),
+          no: finalNo,
+          name: name,
+          noOfShares: toNumber(getVal(["NO OF SHARES", "No. of Shares", "Shares Count", "noOfShares", "No. Shares"])),
+          amountOfShares: toNumber(getVal(["AMOUNT OF SHARES", "Amount Shares", "Amount of Shares", "amountOfShares", "Shares Amount"])),
+          dividend: toNumber(getVal(["DIVIDEND", "Dividends", "dividend", "dividends", "Div"])),
+          hon: toNumber(getVal(["HON", "hon", "Hon"])),
+          investmentArrears: toNumber(getVal(["INVESTMENT ARREARS", "Investment Arrears", "invest arrears", "investmentArrears", "Arrears Investment"])),
+          riskFundArrears: toNumber(getVal(["RISK FUND ARREARS", "Risk Fund Arrears", "risk arrears", "riskFundArrears", "Arrears Risk Fund"])),
+          arrearsOnShares: toNumber(getVal(["ARREARS ON SHARES", "Arrears on Shares", "arrears on share", "arrearsOnShares", "Share Arrears"])),
+          arrearsOnLoans: toNumber(getVal(["ARREARS ON LOANS", "Arrears on loans", "loan arrears", "arrearsOnLoans", "Loan Arrears"])),
+          prevYearArrearsBalance: toNumber(getVal(["PREVIOUS YEAR ARREARS BALANCE", "Prev Year Arrears Balance", "PREV ARREARS", "prevYearArrearsBalance", "PREV. YEAR BALANCE", "Previous Year balance", "prev year balance"])),
+          absenteeism: toNumber(getVal(["ABSENTEEISM", "Absenteeism", "absent", "absenteeism", "Absence"])),
+          arrearsOnWelfare: toNumber(getVal([
+            "ARREARS ON WELFARE",
+            "Arrears On Welfare",
+            "Arrears on Welfare",
+            "Welfare Arrears",
+            "arrearsOnWelfare",
+            "WELFARE",
+            "WELFARE ARREARS",
+            "ARREARS WELFARE",
+            "WELFARE BAL",
+            "Arrears On Welfare Balance"
+          ])),
+          lessAdvanced: toNumber(getVal(["LESS ADVANCED", "Less Advanced", "lessAdvanced", "Advanced"])),
+          netPayAmount: toNumber(getVal(["NET PAY AMOUNT", "Net Pay Amount", "Net Pay", "netPayAmount"])),
+          period: selectedPeriod,
+        });
+
+        return acc;
+      }, []);
 
       if (mappedData.length === 0) {
         alert("No valid member data found after the header row.");
