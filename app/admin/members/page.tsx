@@ -13,6 +13,7 @@ import {
   query,
   where,
   deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../../../lib/firebase";
 import { Plus, Save, FileText, Upload, Trash2, Download } from "lucide-react"; // Added Download icon
@@ -25,21 +26,18 @@ interface MemberData {
   amountOfShares: number;
   dividend: number;
   hon?: number;
+  investmentArrears?: number;
   riskFundArrears?: number;
   arrearsOnShares?: number;
   arrearsOnLoans?: number;
+  prevYearArrearsBalance?: number;
   absenteeism?: number;
   arrearsOnWelfare?: number;
-  prevArrears?: number;
   lessAdvanced?: number;
   netPayAmount?: number;
   period: string;
 }
 
-const DEFAULT_MEMBERS: MemberData[] = [
-  { no: 1, name: "MRS. NYORO", noOfShares: 30, amountOfShares: 36000, dividend: 2700, netPayAmount: 38700, period: "2023/2024" },
-  { no: 2, name: "MAMA WACHEKE", noOfShares: 100, amountOfShares: 120000, dividend: 9000, netPayAmount: 129000, period: "2023/2024" },
-];
 
 export default function MembersPage() {
   const [members, setMembers] = useState<MemberData[]>([]);
@@ -78,43 +76,48 @@ export default function MembersPage() {
         const q = query(collection(db, "members"), where("period", "==", selectedPeriod));
         const snapshot = await getDocs(q);
         if (snapshot.empty) {
-          setMembers([...DEFAULT_MEMBERS]);
+          setMembers([]);
         } else {
           const fetched = snapshot.docs.map((doc) => ({ ...(doc.data() as MemberData), id: doc.id }));
           setMembers(fetched);
         }
       } catch (err) {
         console.error("Error loading members:", err);
-        setMembers([...DEFAULT_MEMBERS]);
+        setMembers([]);
       }
     };
     fetchMembers();
   }, [selectedPeriod]);
 
-  const handleChange = (no: number, field: keyof MemberData, value: string | number) => {
+  const handleChange = (id: string, field: keyof MemberData, value: string | number) => {
     setMembers((prev) =>
       prev.map((m) =>
-        m.no === no
-          ? { ...m, [field]: typeof value === "string" ? toNumber(value) : value }
+        (m.id === id)
+          ? { ...m, [field]: typeof value === "string" ? (field === "name" ? value : toNumber(value)) : value }
           : m
       )
     );
   };
 
   const addNewMember = () => {
+    const currentPeriodMembers = members.filter((m) => m.period === selectedPeriod);
+    const maxNo = currentPeriodMembers.reduce((max, m) => Math.max(max, m.no), 0);
+
     const newMember: MemberData = {
-      no: members.filter((m) => m.period === selectedPeriod).length + 1,
+      id: crypto.randomUUID(),
+      no: maxNo + 1,
       name: "",
       noOfShares: 0,
       amountOfShares: 0,
       dividend: 0,
       hon: 0,
+      investmentArrears: 0,
       riskFundArrears: 0,
       arrearsOnShares: 0,
       arrearsOnLoans: 0,
+      prevYearArrearsBalance: 0,
       absenteeism: 0,
       arrearsOnWelfare: 0,
-      prevArrears: 0,
       lessAdvanced: 0,
       netPayAmount: 0,
       period: selectedPeriod,
@@ -122,22 +125,95 @@ export default function MembersPage() {
     setMembers((prev) => [...prev, newMember]);
   };
 
-  const deleteMember = (id?: string, no?: number) => {
-    if (id) deleteDoc(doc(db, "members", id)).catch((err) => console.error("Delete failed", err));
-    setMembers((prev) => prev.filter((m) => m.id !== id && m.no !== no));
+  const deleteMember = (id?: string) => {
+    if (id && !id.startsWith("default-") && !id.includes("-")) {
+      deleteDoc(doc(db, "members", id)).catch((err) => console.error("Delete failed", err));
+    }
+    setMembers((prev) => prev.filter((m) => m.id !== id));
+  };
+
+  const deleteAllMembers = async () => {
+    if (filteredMembers.length === 0) return;
+    if (!confirm(`⚠️ CRITICAL ACTION: Are you sure you want to delete ALL ${filteredMembers.length} members shown for the period "${selectedPeriod}"? This action permanently removes them from the database and cannot be undone.`)) return;
+
+    try {
+      const batch = writeBatch(db);
+      let count = 0;
+      for (const member of filteredMembers) {
+        if (member.id && !member.id.startsWith("default-")) {
+          batch.delete(doc(db, "members", member.id));
+          count++;
+        }
+      }
+
+      if (count > 0) {
+        await batch.commit();
+      }
+
+      setMembers(prev => prev.filter(m => !filteredMembers.some(fm => fm.id === m.id)));
+      alert(`Successfully deleted ${count} members from the database.`);
+    } catch (err) {
+      console.error("Error deleting all members:", err);
+      alert("Failed to delete all members. Please check your connection.");
+    }
   };
 
   const importFromExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const data = new Uint8Array(await file.arrayBuffer());
-    const workbook = XLSX.read(data, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const json: MemberData[] = XLSX.utils.sheet_to_json(sheet);
-    setMembers((prev) => [
-      ...prev,
-      ...json.map((m, i) => ({ ...m, no: prev.length + i + 1, period: selectedPeriod })),
-    ]);
+
+    try {
+      const data = new Uint8Array(await file.arrayBuffer());
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json: any[] = XLSX.utils.sheet_to_json(sheet);
+
+      const mappedData: MemberData[] = json
+        .filter((row) => row["NAME"] || row["name"] || row["Member Name"] || row["Name"])
+        .filter((row) => {
+          const name = String(row["NAME"] || row["name"] || "").toUpperCase();
+          return name !== "TOTAL" && name !== "SUBTOTAL";
+        })
+        .map((row, i) => {
+          const existingNos = members.map(m => m.no);
+          const rowNo = toNumber(row["NO"] || row["no"] || row["No"]);
+          const finalNo = rowNo > 0 ? rowNo : (members.length + i + 1);
+
+          return {
+            id: crypto.randomUUID(),
+            no: finalNo,
+            name: String(row["NAME"] || row["name"] || row["Member Name"] || row["Name"] || ""),
+            noOfShares: toNumber(row["NO OF SHARES"] || row["noOfShares"] || row["Shares Count"] || row["No. of Shares"]),
+            amountOfShares: toNumber(row["AMOUNT OF SHARES"] || row["amountOfShares"] || row["Shares Amount"] || row["Amount Shares"]),
+            dividend: toNumber(row["DIVIDEND"] || row["dividend"]),
+            hon: toNumber(row["HON"] || row["hon"]),
+            investmentArrears: toNumber(row["INVESTMENT ARREARS"] || row["investmentArrears"] || row["Investment Arrears"]),
+            riskFundArrears: toNumber(row["RISK FUND ARREARS"] || row["riskFundArrears"] || row["Risk Fund Arrears"]),
+            arrearsOnShares: toNumber(row["ARREARS ON SHARES"] || row["arrearsOnShares"] || row["Arrears on Shares"]),
+            arrearsOnLoans: toNumber(row["ARREARS ON LOANS"] || row["arrearsOnLoans"] || row["Arrears on loans"]),
+            prevYearArrearsBalance: toNumber(row["PREVIOUS YEAR ARREARS BALANCE"] || row["prevYearArrearsBalance"] || row["Previous Year Arrears Balance"] || row["PREV ARREARS"]),
+            absenteeism: toNumber(row["ABSENTEEISM"] || row["absenteeism"] || row["Absenteeism"]),
+            arrearsOnWelfare: toNumber(row["ARREARS ON WELFARE"] || row["arrearsOnWelfare"] || row["Arrears On Welfare"]),
+            lessAdvanced: toNumber(row["LESS ADVANCED"] || row["lessAdvanced"] || row["Less Advanced"]),
+            netPayAmount: toNumber(row["NET PAY AMOUNT"] || row["netPayAmount"] || row["Net Pay Amount"]),
+            period: selectedPeriod,
+          };
+        });
+
+      if (mappedData.length === 0) {
+        alert("No valid data found in the Excel file.");
+        return;
+      }
+
+      setMembers((prev) => [...prev, ...mappedData]);
+      alert(`Successfully imported ${mappedData.length} members. Don't forget to click 'Save Changes' to persist to the database.`);
+    } catch (err) {
+      console.error("Import failed:", err);
+      alert("Failed to import Excel file. Please check the file format.");
+    } finally {
+      // Reset input so the same file can be selected again if needed
+      e.target.value = "";
+    }
   };
 
   const saveChanges = async () => {
@@ -161,14 +237,11 @@ export default function MembersPage() {
     const newPeriod = prompt("Enter new financial year (e.g., 2024/2025):");
     if (!newPeriod) return;
 
-    const newMembers = DEFAULT_MEMBERS.map((m) => ({ ...m, period: newPeriod, no: m.no }));
-    setMembers(newMembers);
+    // Start with an empty list for the new financial year
+    setMembers([]);
     setSelectedPeriod(newPeriod);
 
     try {
-      for (const member of newMembers) {
-        await addDoc(collection(db, "members"), member);
-      }
       await setDoc(doc(db, "financialYears", newPeriod), { createdAt: new Date() });
       setAllPeriods((prev) => [...prev, newPeriod]);
     } catch (err) {
@@ -179,43 +252,45 @@ export default function MembersPage() {
   // 🆕 START: EXPORT TO EXCEL FUNCTION
   const exportToExcel = () => {
     const dataToExport = filteredMembers.map(m => ({
-        "NO": m.no,
-        "NAME": m.name,
-        "NO OF SHARES": m.noOfShares,
-        "AMOUNT OF SHARES": m.amountOfShares,
-        "DIVIDEND": m.dividend,
-        "HON": m.hon || 0,
-        "RISK FUND ARREARS": m.riskFundArrears || 0,
-        "ARREARS ON SHARES": m.arrearsOnShares || 0,
-        "ARREARS ON LOANS": m.arrearsOnLoans || 0,
-        "ABSENTEEISM/LATENESS": m.absenteeism || 0,
-        "ARREARS ON WELFARE": m.arrearsOnWelfare || 0,
-        "PREV ARREARS": m.prevArrears || 0,
-        "LESS ADVANCED": m.lessAdvanced || 0,
-        "NET PAY AMOUNT": m.netPayAmount || 0,
-        "PERIOD": m.period,
+      "No.": m.no,
+      "Name": m.name,
+      "No. of Shares": m.noOfShares,
+      "Amount Shares": m.amountOfShares,
+      "Dividend": m.dividend,
+      "HON": m.hon || 0,
+      "Investment Arrears": m.investmentArrears || 0,
+      "Risk Fund Arrears": m.riskFundArrears || 0,
+      "Arrears on Shares": m.arrearsOnShares || 0,
+      "Arrears on loans": m.arrearsOnLoans || 0,
+      "Previous Year Arrears Balance": m.prevYearArrearsBalance || 0,
+      "Absenteeism": m.absenteeism || 0,
+      "Arrears On Welfare": m.arrearsOnWelfare || 0,
+      "Less Advanced": m.lessAdvanced || 0,
+      "Net Pay Amount": m.netPayAmount || 0,
+      "PERIOD": m.period,
     }));
 
     const totalRow = {
-        "NO": "TOTAL",
-        "NAME": "",
-        "NO OF SHARES": totals.noOfShares,
-        "AMOUNT OF SHARES": totals.amountOfShares,
-        "DIVIDEND": totals.dividend,
-        "HON": totals.hon,
-        "RISK FUND ARREARS": totals.riskFundArrears,
-        "ARREARS ON SHARES": totals.arrearsOnShares,
-        "ARREARS ON LOANS": totals.arrearsOnLoans,
-        "ABSENTEEISM/LATENESS": totals.absenteeism,
-        "ARREARS ON WELFARE": totals.arrearsOnWelfare,
-        "PREV ARREARS": totals.prevArrears,
-        "LESS ADVANCED": totals.lessAdvanced,
-        "NET PAY AMOUNT": totals.netPayAmount,
-        "PERIOD": selectedPeriod,
+      "No.": "TOTAL",
+      "Name": "",
+      "No. of Shares": totals.noOfShares,
+      "Amount Shares": totals.amountOfShares,
+      "Dividend": totals.dividend,
+      "HON": totals.hon,
+      "Investment Arrears": totals.investmentArrears,
+      "Risk Fund Arrears": totals.riskFundArrears,
+      "Arrears on Shares": totals.arrearsOnShares,
+      "Arrears on loans": totals.arrearsOnLoans,
+      "Previous Year Arrears Balance": totals.prevYearArrearsBalance,
+      "Absenteeism": totals.absenteeism,
+      "Arrears On Welfare": totals.arrearsOnWelfare,
+      "Less Advanced": totals.lessAdvanced,
+      "Net Pay Amount": totals.netPayAmount,
+      "PERIOD": selectedPeriod,
     };
 
     const dataWithTotals = [...dataToExport, totalRow];
-    
+
     const ws = XLSX.utils.json_to_sheet(dataWithTotals);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, tableTitle || "Members Data");
@@ -244,19 +319,21 @@ export default function MembersPage() {
     acc.amountOfShares += toNumber(m.amountOfShares);
     acc.dividend += toNumber(m.dividend);
     acc.hon += toNumber(m.hon);
+    acc.investmentArrears += toNumber(m.investmentArrears);
     acc.riskFundArrears += toNumber(m.riskFundArrears);
     acc.arrearsOnShares += toNumber(m.arrearsOnShares);
     acc.arrearsOnLoans += toNumber(m.arrearsOnLoans);
+    acc.prevYearArrearsBalance += toNumber(m.prevYearArrearsBalance);
     acc.absenteeism += toNumber(m.absenteeism);
     acc.arrearsOnWelfare += toNumber(m.arrearsOnWelfare);
-    acc.prevArrears += toNumber(m.prevArrears);
     acc.lessAdvanced += toNumber(m.lessAdvanced);
     acc.netPayAmount += toNumber(m.netPayAmount);
     return acc;
   }, {
-    noOfShares: 0, amountOfShares: 0, dividend: 0, hon: 0, riskFundArrears: 0,
-    arrearsOnShares: 0, arrearsOnLoans: 0, absenteeism: 0, arrearsOnWelfare: 0,
-    prevArrears: 0, lessAdvanced: 0, netPayAmount: 0
+    noOfShares: 0, amountOfShares: 0, dividend: 0, hon: 0, investmentArrears: 0,
+    riskFundArrears: 0, arrearsOnShares: 0, arrearsOnLoans: 0,
+    prevYearArrearsBalance: 0, absenteeism: 0, arrearsOnWelfare: 0,
+    lessAdvanced: 0, netPayAmount: 0
   });
 
   return (
@@ -303,6 +380,13 @@ export default function MembersPage() {
           <Save size={16} /> Save Changes
         </button>
 
+        <button
+          onClick={deleteAllMembers}
+          className="bg-red-500 hover:bg-red-600 px-4 py-2 rounded-lg text-white flex items-center gap-2 shadow-lg transition-transform transform hover:scale-105"
+        >
+          <Trash2 size={16} /> Delete All
+        </button>
+
         {/* 🆕 START: EXPORT TO EXCEL BUTTON */}
         <button
           onClick={exportToExcel}
@@ -336,30 +420,36 @@ export default function MembersPage() {
         <table className="min-w-max w-full text-left">
           <thead className="bg-gray-800/80 text-gray-200 sticky top-0">
             <tr>
-              {["NO","NAME","NO OF SHARES","AMOUNT OF SHARES","DIVIDEND","HON","RISK FUND AREARS","ARREARS ON SHARES","ARREARS ON LOANS","ABSENTEEISM/LATENESS","ARREARS ON WELFARE","PREV AREARS","LESS ADVANCED","NET PAY AMOUNT","ACTIONS"].map(c => (
+              {[
+                "No.", "Name", "No. of Shares", "Amount Shares", "Dividend", "HON",
+                "Investment Arrears", "Risk Fund Arrears", "Arrears on Shares", "Arrears on loans",
+                "Previous Year Arrears Balance", "Absenteeism", "Arrears On Welfare",
+                "Less Advanced", "Net Pay Amount", "ACTIONS"
+              ].map(c => (
                 <th key={c} className="px-6 py-3 border-b border-gray-700">{c}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filteredMembers.map((m) => (
-              <tr key={m.no} className="hover:bg-gray-700/50">
+              <tr key={m.id || m.no} className="hover:bg-gray-700/50">
                 <td className="px-6 py-3 border-b border-gray-700">{m.no}</td>
-                <td><input value={m.name} onChange={e => handleChange(m.no, "name", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.noOfShares} onChange={e => handleChange(m.no, "noOfShares", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.amountOfShares} onChange={e => handleChange(m.no, "amountOfShares", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.dividend} onChange={e => handleChange(m.no, "dividend", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.hon || 0} onChange={e => handleChange(m.no, "hon", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.riskFundArrears || 0} onChange={e => handleChange(m.no, "riskFundArrears", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.arrearsOnShares || 0} onChange={e => handleChange(m.no, "arrearsOnShares", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.arrearsOnLoans || 0} onChange={e => handleChange(m.no, "arrearsOnLoans", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.absenteeism || 0} onChange={e => handleChange(m.no, "absenteeism", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.arrearsOnWelfare || 0} onChange={e => handleChange(m.no, "arrearsOnWelfare", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.prevArrears || 0} onChange={e => handleChange(m.no, "prevArrears", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.lessAdvanced || 0} onChange={e => handleChange(m.no, "lessAdvanced", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
-                <td><input type="number" value={m.netPayAmount || 0} onChange={e => handleChange(m.no, "netPayAmount", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input value={m.name} onChange={e => handleChange(m.id!, "name", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.noOfShares} onChange={e => handleChange(m.id!, "noOfShares", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.amountOfShares} onChange={e => handleChange(m.id!, "amountOfShares", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.dividend} onChange={e => handleChange(m.id!, "dividend", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.hon || 0} onChange={e => handleChange(m.id!, "hon", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.investmentArrears || 0} onChange={e => handleChange(m.id!, "investmentArrears", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.riskFundArrears || 0} onChange={e => handleChange(m.id!, "riskFundArrears", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.arrearsOnShares || 0} onChange={e => handleChange(m.id!, "arrearsOnShares", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.arrearsOnLoans || 0} onChange={e => handleChange(m.id!, "arrearsOnLoans", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.prevYearArrearsBalance || 0} onChange={e => handleChange(m.id!, "prevYearArrearsBalance", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.absenteeism || 0} onChange={e => handleChange(m.id!, "absenteeism", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.arrearsOnWelfare || 0} onChange={e => handleChange(m.id!, "arrearsOnWelfare", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.lessAdvanced || 0} onChange={e => handleChange(m.id!, "lessAdvanced", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
+                <td><input type="number" value={m.netPayAmount || 0} onChange={e => handleChange(m.id!, "netPayAmount", e.target.value)} className="bg-gray-700/50 text-gray-200 px-2 py-1 w-full" /></td>
                 <td>
-                  <button onClick={() => deleteMember(m.id, m.no)} className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg flex items-center gap-1 text-white shadow-lg transition-transform transform hover:scale-105">
+                  <button onClick={() => deleteMember(m.id)} className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg flex items-center gap-1 text-white shadow-lg transition-transform transform hover:scale-105">
                     <Trash2 size={14} /> Delete
                   </button>
                 </td>
@@ -373,12 +463,13 @@ export default function MembersPage() {
               <td className="px-6 py-3 border-gray-700">{totals.amountOfShares}</td>
               <td className="px-6 py-3 border-gray-700">{totals.dividend}</td>
               <td className="px-6 py-3 border-gray-700">{totals.hon}</td>
+              <td className="px-6 py-3 border-gray-700">{totals.investmentArrears}</td>
               <td className="px-6 py-3 border-gray-700">{totals.riskFundArrears}</td>
               <td className="px-6 py-3 border-gray-700">{totals.arrearsOnShares}</td>
               <td className="px-6 py-3 border-gray-700">{totals.arrearsOnLoans}</td>
+              <td className="px-6 py-3 border-gray-700">{totals.prevYearArrearsBalance}</td>
               <td className="px-6 py-3 border-gray-700">{totals.absenteeism}</td>
               <td className="px-6 py-3 border-gray-700">{totals.arrearsOnWelfare}</td>
-              <td className="px-6 py-3 border-gray-700">{totals.prevArrears}</td>
               <td className="px-6 py-3 border-gray-700">{totals.lessAdvanced}</td>
               <td className="px-6 py-3 border-gray-700">{totals.netPayAmount}</td>
               <td className="px-6 py-3 border-gray-700"></td>

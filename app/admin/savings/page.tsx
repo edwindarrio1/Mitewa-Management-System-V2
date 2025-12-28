@@ -163,33 +163,45 @@ export default function SavingsPage() {
     XLSX.writeFile(workbook, `${safeName}_savings.xlsx`);
   };
 
-  const importExcel = (e: any) => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
+  const importExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    reader.onload = (evt: any) => {
-      const bstr = evt.target.result;
-      const wb = XLSX.read(bstr, { type: "binary" });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data = XLSX.utils.sheet_to_json(ws);
+    try {
+      const data = new Uint8Array(await file.arrayBuffer());
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json: any[] = XLSX.utils.sheet_to_json(sheet);
 
-      const importedSavings: Saving[] = (data as any[]).map((row) =>
-        recalc({
-          id: crypto.randomUUID(),
-          memberId: members.find((m) => m.name === row.MEMBER)?.id || selectedMemberId,
-          date: row.DATE || "",
-          dueDate: row.DUE_DATE || "", // NEW FIELD
-          amount: toNumber(row.AMOUNT),
-          interest: toNumber(row.INTEREST),
-          balance: 0,
-        })
-      );
+      const importedSavings: Saving[] = json
+        .filter((row) => row["MEMBER"] || row["member"] || row["Member"] || row["NAME"] || row["name"])
+        .map((row) =>
+          recalc({
+            id: crypto.randomUUID(),
+            memberId: members.find((m) =>
+              m.name.toLowerCase() === String(row.MEMBER || row.member || row.Member || row.NAME || row.name || "").toLowerCase()
+            )?.id || selectedMemberId,
+            date: row.DATE || row.date || row.Date || "",
+            dueDate: row.DUE_DATE || row.due_date || row.DueDate || row["DUE DATE"] || "",
+            amount: toNumber(row.AMOUNT || row.amount || row.Amount),
+            interest: toNumber(row.INTEREST || row.interest || row.Interest),
+            balance: 0,
+          })
+        );
+
+      if (importedSavings.length === 0) {
+        alert("No valid data found in the Excel file.");
+        return;
+      }
 
       setSavings(importedSavings);
-    };
-
-    reader.readAsBinaryString(file);
+      alert(`Imported ${importedSavings.length} records. Click 'Save' to persist.`);
+    } catch (err) {
+      console.error("Import failed:", err);
+      alert("Failed to import Excel file.");
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const buttonClasses =
