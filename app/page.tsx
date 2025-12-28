@@ -85,7 +85,7 @@ export default function HomePage() {
             },
             {
               title: "📊 Smart Analytics",
-              desc: "Visualize total savings, loans, and performance metrics across your SACCO.",
+              desc: "Visualize total savings, loans, and performance metrics across your Group.",
             },
             {
               title: "🔐 Secure Admin Access",
